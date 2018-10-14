@@ -5,6 +5,8 @@
  */
 package com.poemgenerator.model;
 
+import java.util.List;
+
 /**
  *
  * @author dennis
@@ -12,13 +14,11 @@ package com.poemgenerator.model;
 public class Rule {
     
     private String name;
-    private String[] words;
-    private String[] references;
+    private List<String[]> elements;
 
-    public Rule(String name, String[] words, String[] references) {
+    public Rule(String name, List<String[]> elements) {
         this.name = name;
-        this.words = words;
-        this.references = references;
+        this.elements = elements;
     }
     
     
@@ -31,21 +31,14 @@ public class Rule {
         this.name = name;
     }
 
-    public String[] getWords() {
-        return words;
+    public List<String[]> getElements() {
+        return elements;
     }
 
-    public void setWords(String[] words) {
-        this.words = words;
+    public void setElements(List<String[]> elements) {
+        this.elements = elements;
     }
-
-    public String[] getReferences() {
-        return references;
-    }
-
-    public void setReferences(String[] references) {
-        this.references = references;
-    }
+    
     
     
 }

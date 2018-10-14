@@ -5,7 +5,10 @@
  */
 package com.poemgenerator.business;
 
+import com.poemgenerator.exceptions.InvalidRuleDefinition;
 import com.poemgenerator.model.Rule;
+import com.poemgenerator.util.FileUtil;
+import com.poemgenerator.util.StringUtil;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -20,9 +23,9 @@ import java.util.concurrent.ThreadLocalRandom;
 public class PoemGenerator {
 
     private static final String BREAK_LINE = "\n";
-    
+    private static final String KEYWORDS_LINE_BREAK = "$LINEBREAK";
     private static final String[] KEYWORDS = {"$END", "$LINEBREAK"};
-    private static final String[] RULES_WITHOUT_VALUES = {"LINE", "POEM"};
+    private static final String[] RULES_WITHOUT_VALUES = {"<LINE>", "<POEM>"};
     
     /**
      * Process an input file from path.
@@ -31,29 +34,21 @@ public class PoemGenerator {
      */
     public Map<String, Rule> processFile(String path) {
         Map<String, Rule> rules = new HashMap();
+        List<String> lines;
         
-        rules.put("POEM",new Rule("POEM", new String[]{}, new String[]{"LINE","LINE","LINE","LINE","LINE"}));
-        rules.put("LINE",new Rule("LINE", new String[]{}, new String[]{"NOUN","PREPOSITION","PRONOUN"}));
+        lines = FileUtil.readLines(path);
         
-        rules.put("ADJECTIVE",new Rule("ADJECTIVE", 
-                                "black|white|dark|light|bright|murky|muddy|clear".split("\\|"),
-                                "NOUN|ADJECTIVE|$END".split("\\|") ));
         
-        rules.put("NOUN",new Rule("NOUN", 
-                                "heart|sun|moon|thunder|fire|time|wind|sea|river|flavor|wave|willow|rain|tree|flower|field|meadow|pasture|harvest|water|father|mother|brother|sister".split("\\|"),
-                                "VERB|PREPOSITION|$END".split("\\|") ));
+        lines.stream().forEach((line) -> {
+            System.out.println(line);
+            try {
+                Rule rule = extractRule(line);
+                rules.put(rule.getName(), rule);
+            } catch (InvalidRuleDefinition e){
+                System.out.println("Invalid rule: " + e.getMessage());
+            }
+        });
         
-        rules.put("PRONOUN",new Rule("PRONOUN", 
-                                "my|your|his|her".split("\\|"),
-                                "NOUN|ADJECTIVE".split("\\|") ));
-        
-        rules.put("VERB",new Rule("VERB", 
-                                "runs|walks|stands|climbs|crawls|flows|flies|transcends|ascends|descends|sinks".split("\\|"),
-                                "PREPOSITION|PRONOUN|$END".split("\\|") ));
-        
-        rules.put("PREPOSITION",new Rule("PREPOSITION", 
-                                "above|across|against|along|among|around|before|behind|beneath|beside|between|beyond|during|inside|onto|outside|under|underneath|upon|with|without|through".split("\\|"),
-                                "NOUN|PRONOUN|ADJECTIVE".split("\\|") ));
         return rules;
     }
 
@@ -65,18 +60,11 @@ public class PoemGenerator {
     public List<String> generatePoem(Map<String, Rule> allRules) {
         List<String> lines = new ArrayList();
         
-        Rule poem = allRules.get("POEM");
+        Rule poem = allRules.get("<POEM>");
         if (poem==null){
             throw new IllegalArgumentException("Poem rule do not exists");
         } else {
-            for (String reference: poem.getReferences()){
-                Rule line = allRules.get(reference);
-                String resultLine = "";
-                if (line!=null){
-                    resultLine = evaluateRuleReference(allRules, line) + BREAK_LINE;
-                    lines.add(resultLine);
-                }
-            }
+            lines.add(evaluateRuleReference(allRules, poem));
         }
         
         return lines;        
@@ -93,29 +81,22 @@ public class PoemGenerator {
         String evaluatedText = "";
         //System.out.println("Cur. rule: " + currentRule.getName());
         
-        String[] words = currentRule.getWords();
-        if (Arrays.binarySearch(RULES_WITHOUT_VALUES, currentRule.getName())<0){
-            if (words==null || words.length<1){
-                throw new IllegalArgumentException("Can't found words");
-            } else {            
-                wordIndex = ThreadLocalRandom.current().nextInt(0, words.length);
-                evaluatedText += (words[wordIndex] + " ");
+        for(String[] elements: currentRule.getElements()){
+            wordIndex = ThreadLocalRandom.current().nextInt(0, elements.length);
+            String word = elements[wordIndex];
+            
+            if( StringUtil.isKeyword(word) ){
+                if (KEYWORDS_LINE_BREAK.equals(word)){
+                    evaluatedText += "\n";
+                }                
+            } else if( StringUtil.isReference(word) ){
+                Rule nextRule = allRules.get(word);
+                evaluatedText += evaluateRuleReference(allRules, nextRule);
+            } else {
+                evaluatedText += (word + " ");
             }
         }
         
-        String[] references = currentRule.getReferences();
-        if (references==null || references.length<1){
-            throw new IllegalArgumentException("Can't found references");
-        } else {            
-            int referenceIndex = ThreadLocalRandom.current().nextInt(0, references.length);
-            //System.out.println("refIndex: " + referenceIndex + " from : " + Arrays.toString(references));
-            String currentReference = references[referenceIndex];
-            if (Arrays.binarySearch(KEYWORDS, currentReference)<0){
-                Rule nextRule = allRules.get(currentReference);
-                evaluatedText += evaluateRuleReference(allRules, nextRule);
-            }            
-        }        
-        //System.out.println("evaluated: " + resultValue);
         return evaluatedText;
     }
 
@@ -127,7 +108,61 @@ public class PoemGenerator {
         System.out.println("\nPrinting generated poem ... ");
         System.out.println("===============================\n");
         poemLines.stream().forEach((line) -> {
-            System.out.println(line);
+            System.out.print(line);
+        });
+        System.out.println("===============================");
+    }
+
+    /**
+     * Extract rule from a line.
+     * @param line Line text.
+     * @return Generated rule.
+     */
+    private Rule extractRule(String line) {
+        Rule rule = null;
+        String ruleName = "";
+        List<String[]> elements = new ArrayList<>();
+        if (line== null && line.isEmpty()){
+            throw new InvalidRuleDefinition("Line is null or empty");
+        } else {
+            String ruleParts[] = line.trim().split(" ");
+            if (ruleParts!=null){
+                ruleName = ruleParts[0].trim().replace(":", "");
+
+                if (Arrays.binarySearch(RULES_WITHOUT_VALUES, ruleName)<0){
+                    if (ruleParts.length>=2){
+                        for(int i=1; i <ruleParts.length; i++){
+                            String[] possibleElements = ruleParts[i].trim().split("\\|");
+                            elements.add(possibleElements);                            
+                        }
+                    } else {
+                        throw new InvalidRuleDefinition(String.format("[%s], has only (%d) parts  ", ruleName, ruleParts.length));
+                    }
+
+                }
+            } else {
+                throw new InvalidRuleDefinition("Reading: Empty line parts");
+            }
+        }
+        
+        rule = new Rule(String.format("<%s>", ruleName), elements);
+        
+        return rule;
+    }
+
+    /**
+     * Print all rules.
+     * @param allRules Map for rules.
+     */
+    public void printLoadedRules(Map<String, Rule> allRules) {
+        System.out.println("\nPrinting loaded Rules ... ");
+        System.out.println("===============================\n");
+        allRules.values().stream().forEach((rule) -> {
+            System.out.println("\n");
+            System.out.println(rule.getName());
+            for(String[] elements: rule.getElements()){
+                System.out.println(Arrays.toString(elements));
+            }
         });
         System.out.println("===============================");
     }
