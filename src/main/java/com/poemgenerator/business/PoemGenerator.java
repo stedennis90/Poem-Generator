@@ -21,11 +21,8 @@ import java.util.concurrent.ThreadLocalRandom;
  * @author dennis
  */
 public class PoemGenerator {
-
-    private static final String BREAK_LINE = "\n";
+    
     private static final String KEYWORDS_LINE_BREAK = "$LINEBREAK";
-    private static final String[] KEYWORDS = {"$END", "$LINEBREAK"};
-    private static final String[] RULES_WITHOUT_VALUES = {"<LINE>", "<POEM>"};
     
     /**
      * Process an input file from path.
@@ -119,35 +116,28 @@ public class PoemGenerator {
      * @return Generated rule.
      */
     private Rule extractRule(String line) {
-        Rule rule = null;
         String ruleName = "";
         List<String[]> elements = new ArrayList<>();
-        if (line== null && line.isEmpty()){
+        if (line== null || line.isEmpty()){
             throw new InvalidRuleDefinition("Line is null or empty");
         } else {
             String ruleParts[] = line.trim().split(" ");
             if (ruleParts!=null){
                 ruleName = ruleParts[0].trim().replace(":", "");
-
-                if (Arrays.binarySearch(RULES_WITHOUT_VALUES, ruleName)<0){
-                    if (ruleParts.length>=2){
-                        for(int i=1; i <ruleParts.length; i++){
-                            String[] possibleElements = ruleParts[i].trim().split("\\|");
-                            elements.add(possibleElements);                            
-                        }
-                    } else {
-                        throw new InvalidRuleDefinition(String.format("[%s], has only (%d) parts  ", ruleName, ruleParts.length));
+                if (ruleParts.length>=2){
+                    for(int i=1; i <ruleParts.length; i++){
+                        String[] possibleElements = ruleParts[i].trim().split("\\|");
+                        elements.add(possibleElements);                            
                     }
-
+                } else {
+                    throw new InvalidRuleDefinition(String.format("[%s], has only (%d) parts  ", ruleName, ruleParts.length));
                 }
             } else {
                 throw new InvalidRuleDefinition("Reading: Empty line parts");
             }
         }
         
-        rule = new Rule(String.format("<%s>", ruleName), elements);
-        
-        return rule;
+        return new Rule(String.format("<%s>", ruleName), elements);
     }
 
     /**
